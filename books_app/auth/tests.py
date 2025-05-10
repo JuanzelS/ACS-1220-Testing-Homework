@@ -6,7 +6,7 @@ from books_app.models import Book, Author, User, Audience
 
 """
 Run these tests with the command:
-python -m unittest books_app.main.tests
+python -m unittest books_app.auth.tests
 """
 
 #################################################
@@ -32,6 +32,15 @@ def create_user():
     db.session.add(user)
     db.session.commit()
 
+def login(client, username, password):
+    return client.post('/login', data=dict(
+        username=username,
+        password=password
+    ), follow_redirects=True)
+
+def logout(client):
+    return client.get('/logout', follow_redirects=True)
+
 #################################################
 # Tests
 #################################################
@@ -48,11 +57,19 @@ class AuthTests(TestCase):
         self.app = app.test_client()
         db.drop_all()
         db.create_all()
+        
+        # Make sure no user is logged in at the start of each test
+        with self.app.session_transaction() as session:
+            session.clear()
     
     def test_signup(self):
-        # TODO: Write a test for the signup route. It should:
-        # - Make a POST request to /signup, sending a username & password
-        # - Check that the user now exists in the database
+        """
+        Test the signup route.
+        
+        This test ensures that:
+        1. A new user can be created through the signup form
+        2. The user is correctly added to the database
+        """
         post_data = {
             'username': 'new_user',
             'password': 'new_password'
@@ -65,11 +82,13 @@ class AuthTests(TestCase):
         self.assertIsNotNone(user)
     
     def test_signup_existing_user(self):
-        # TODO: Write a test for the signup route. It should:
-        # - Create a user
-        # - Make a POST request to /signup, sending the same username & password
-        # - Check that the form is displayed again with an error message
+        """
+        Test signup with an existing username.
         
+        This test ensures that:
+        1. A user cannot sign up with a username that already exists
+        2. The appropriate error message is displayed
+        """
         # Create a user
         create_user()
         
@@ -86,11 +105,13 @@ class AuthTests(TestCase):
         self.assertIn('That username is taken', response_text)
     
     def test_login_correct_password(self):
-        # TODO: Write a test for the login route. It should:
-        # - Create a user
-        # - Make a POST request to /login, sending the created username & password
-        # - Check that the "login" button is not displayed on the homepage
+        """
+        Test login with correct credentials.
         
+        This test ensures that:
+        1. A user can log in with the correct username and password
+        2. After login, the login button is no longer visible
+        """
         # Create a user
         create_user()
         
@@ -105,13 +126,16 @@ class AuthTests(TestCase):
         self.assertEqual(response.status_code, 200)
         response_text = response.get_data(as_text=True)
         self.assertNotIn('Log In', response_text)
+        self.assertIn('Log Out', response_text)  # Check that logout is visible instead
     
     def test_login_nonexistent_user(self):
-        # TODO: Write a test for the login route. It should:
-        # - Make a POST request to /login, sending a username & password
-        # - Check that the login form is displayed again, with an appropriate
-        # error message
+        """
+        Test login with a nonexistent user.
         
+        This test ensures that:
+        1. A user cannot log in with a username that doesn't exist
+        2. The appropriate error message is displayed
+        """
         # Make a POST request to /login with a nonexistent user
         post_data = {
             'username': 'nonexistent_user',
@@ -125,13 +149,13 @@ class AuthTests(TestCase):
         self.assertIn('No user with that username', response_text)
     
     def test_login_incorrect_password(self):
-        # TODO: Write a test for the login route. It should:
-        # - Create a user
-        # - Make a POST request to /login, sending the created username &
-        # an incorrect password
-        # - Check that the login form is displayed again, with an appropriate
-        # error message
+        """
+        Test login with incorrect password.
         
+        This test ensures that:
+        1. A user cannot log in with an incorrect password
+        2. The appropriate error message is displayed
+        """
         # Create a user
         create_user()
         
@@ -145,15 +169,18 @@ class AuthTests(TestCase):
         # Check that the login form is displayed again with an error message
         self.assertEqual(response.status_code, 200)
         response_text = response.get_data(as_text=True)
-        self.assertIn('Password doesn\'t match', response_text)
+        
+        # Fixed assertion to match actual HTML output
+        self.assertIn('Password doesn&#39;t match', response_text)
     
     def test_logout(self):
-        # TODO: Write a test for the logout route. It should:
-        # - Create a user
-        # - Log the user in (make a POST request to /login)
-        # - Make a GET request to /logout
-        # - Check that the "login" button appears on the homepage
+        """
+        Test the logout route.
         
+        This test ensures that:
+        1. A logged-in user can log out
+        2. After logout, the login button is visible again
+        """
         # Create a user
         create_user()
         
@@ -162,7 +189,9 @@ class AuthTests(TestCase):
             'username': 'me1',
             'password': 'password'
         }
-        self.app.post('/login', data=post_data, follow_redirects=True)
+        login_response = self.app.post('/login', data=post_data, follow_redirects=True)
+        login_text = login_response.get_data(as_text=True)
+        self.assertIn('Log Out', login_text)  # Verify user is logged in
         
         # Make a GET request to /logout
         response = self.app.get('/logout', follow_redirects=True)
